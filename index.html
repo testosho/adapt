@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Screenplay Adaptation Studio Enhanced - Local Server Fix</title>
+<title>Screenplay Adaptation Studio - LM Studio Integration</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.18/mammoth.browser.min.js"></script>
@@ -55,8 +55,8 @@
       </div>
       <div id="local-form" class="hidden space-y-2">
         <label for="apiUrl" class="text-sm font-medium text-gray-300">Local Server URL</label>
-        <input type="text" id="apiUrl" value="http://localhost:1234/v1/chat/completions" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" />
-        <p class="text-xs text-gray-400 mt-1">Ensure your local server supports CORS for this origin or use a CORS proxy in development.</p>
+        <input type="text" id="apiUrl" value="http://localhost:1234" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" />
+        <p class="text-xs text-gray-400 mt-1">Do not include path. Only base URL (e.g. http://localhost:1234)</p>
       </div>
     </section>
 
@@ -67,7 +67,7 @@
       <p id="fileStatus" class="text-xs text-gray-400 mt-2">Upload a PDF, DOCX, Fountain, or Plain Text file.</p>
     </section>
 
-    <!-- Beat Sheet / Outline Upload or Generate -->
+    <!-- Beat Sheet / Outline Upload or type -->
     <section>
       <h2 class="font-semibold mb-3 text-lg">3. Define Screenplay Structure (Beat Sheet)</h2>
       <textarea id="beatSheetInput" rows="5" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 placeholder-gray-500" placeholder="Paste or type your story beats (e.g., Act 1: Setup, Act 2: Conflict, etc.)"></textarea>
@@ -86,7 +86,7 @@
 
 <!-- EDITOR VIEW -->
 <div id="editor-view" class="hidden flex h-screen overflow-hidden">
-  <!-- Left Panel: Controls and Memory -->
+  <!-- Left Panel: Controls and Story Memory -->
   <div class="w-1/4 bg-gray-800 p-6 flex flex-col h-full overflow-auto">
     <h2 class="text-xl font-bold text-blue-400 border-b border-gray-600 pb-3 mb-4">Adaptation Controls & Story Memory</h2>
 
@@ -155,13 +155,13 @@
   // State Variables
   let originalScriptContent = '';
   let currentChunkIndex = 0;
-  let chunkBoundaries = [];  // {start,end} by beats or fallback fixed chunk
+  let chunkBoundaries = [];
   let storyMemoryData = '';
 
   // Constants
-  const DEFAULT_CHUNK_SIZE = 7000; // fallback chunk size
+  const DEFAULT_CHUNK_SIZE = 7000;
 
-  // Event Listeners
+  // Event listeners
   apiSelectionRadios.forEach(radio => radio.addEventListener('change', toggleApiForm));
   fileInput.addEventListener('change', handleFileUpload);
   viewScriptButton.addEventListener('click', showEditorView);
@@ -193,7 +193,6 @@
     try {
       const extension = file.name.split('.').pop().toLowerCase();
       let textContent = '';
-
       if (extension === 'pdf') textContent = await parsePdf(file);
       else if (extension === 'docx') textContent = await parseDocx(file);
       else if (['fountain', 'txt'].includes(extension)) textContent = await file.text();
@@ -225,7 +224,6 @@
         start = end;
       });
     } else {
-      // Fixed chunk fallback
       const length = originalScriptContent.length;
       let start = 0;
       while (start < length) {
@@ -250,12 +248,10 @@
       setContinueButtonLoading(false, true);
       return;
     }
-
     setContinueButtonLoading(true);
 
     const { start, end } = chunkBoundaries[currentChunkIndex];
     const scriptChunk = originalScriptContent.substring(start, end).trim();
-
     const progress = Math.round(((currentChunkIndex + 1) / chunkBoundaries.length) * 100);
     updateStatus(`Adapting chunk ${currentChunkIndex + 1} of ${chunkBoundaries.length}... (${progress}%)`, 'yellow');
 
@@ -272,15 +268,11 @@
 
     try {
       const adaptedText = await callApi(systemPrompt, userPrompt);
-
       adaptedScriptEditor.value += (adaptedScriptEditor.value.length > 0 ? '\n\n' : '') + adaptedText;
       adaptedScriptEditor.scrollTop = adaptedScriptEditor.scrollHeight;
-
       storyMemory.value = storyMemoryData;
-
       currentChunkIndex++;
       const finished = currentChunkIndex >= chunkBoundaries.length;
-
       updateStatus(finished ? 'Adaptation complete!' : `Chunk ${currentChunkIndex} complete. Ready for next.`, 'green');
       setContinueButtonLoading(false, finished);
     } catch (error) {
@@ -326,11 +318,11 @@
       return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 
     } else {
-      let url = document.getElementById('apiUrl').value.trim();
-      if (!url) throw new Error('Local Server URL is missing.');
+      let baseUrl = document.getElementById('apiUrl').value.trim();
+      if (!baseUrl) throw new Error('Local Server URL is missing.');
 
-      // Uncomment for dev if CORS issue (not for production)
-      // url = `https://cors-anywhere.herokuapp.com/${url}`;
+      // API expects /v1/chat/completions path appended internally
+      const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
       const payload = {
         model: "local-model",
@@ -356,13 +348,13 @@
         }
 
         const result = await response.json();
-        if (!result.choices || !result.choices[0].message) {
-          throw new Error('Unexpected API response structure');
+        if (!result.choices || !result.choices[0].message || !result.choices[0].message.content) {
+          throw new Error('Unexpected local API response structure');
         }
         return result.choices[0].message.content.trim();
 
       } catch (err) {
-        console.error('Fetch/local API error:', err);
+        console.error('Local API error:', err);
         throw new Error(`Local API request failed: ${err.message}`);
       }
     }
@@ -439,7 +431,6 @@
     return result.value;
   }
 
-  // New: Test local API connectivity
   async function testLocalApiConnection() {
     apiTestStatus.textContent = '';
     if (document.querySelector('input[name="apiSelection"]:checked').value !== 'local') {
@@ -448,8 +439,8 @@
       return;
     }
 
-    const url = document.getElementById('apiUrl').value.trim();
-    if (!url) {
+    const baseUrl = document.getElementById('apiUrl').value.trim();
+    if (!baseUrl) {
       apiTestStatus.textContent = 'Local Server URL is empty.';
       apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
       return;
@@ -458,10 +449,11 @@
     apiTestStatus.textContent = 'Testing connection...';
     apiTestStatus.className = 'text-xs mt-2 text-center text-yellow-400';
 
+    // Test payload similar to the production call with minimal tokens and a ping message
     const testPayload = {
       model: "local-model",
       messages: [
-        { role: "system", content: "Test if local server chat API is reachable." },
+        { role: "system", content: "Connectivity test." },
         { role: "user", content: "Ping" }
       ],
       temperature: 0,
@@ -470,7 +462,7 @@
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testPayload)
