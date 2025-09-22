@@ -255,7 +255,17 @@
     const progress = Math.round(((currentChunkIndex + 1) / chunkBoundaries.length) * 100);
     updateStatus(`Adapting chunk ${currentChunkIndex + 1} of ${chunkBoundaries.length}... (${progress}%)`, 'yellow');
 
-    storyMemoryData = generateStoryMemorySummary(adaptedScriptEditor.value);
+    // Generate an updated story memory summary before adapting the next chunk
+    try {
+      updateStatus(`Analyzing script for story memory...`, 'yellow');
+      storyMemoryData = await extractSemanticSummary(adaptedScriptEditor.value);
+      storyMemory.value = storyMemoryData;
+      updateStatus(`Adapting chunk ${currentChunkIndex + 1} of ${chunkBoundaries.length}... (${progress}%)`, 'yellow');
+    } catch (error) {
+        updateStatus(`Error generating summary: ${error.message}`, 'red');
+        setContinueButtonLoading(false);
+        return; // Stop if summary generation fails
+    }
 
     const systemPrompt = `You are a world-class screenplay adapter AI specialized in feature film scripts. Adapt the screenplay chunk provided, respecting the target language, culture, and core instructions. Maintain character names, plot points, and tone as defined in prior adapted material. Use the Story Memory to maintain continuity:\n${storyMemoryData}`;
 
@@ -270,7 +280,6 @@
       const adaptedText = await callApi(systemPrompt, userPrompt);
       adaptedScriptEditor.value += (adaptedScriptEditor.value.length > 0 ? '\n\n' : '') + adaptedText;
       adaptedScriptEditor.scrollTop = adaptedScriptEditor.scrollHeight;
-      storyMemory.value = storyMemoryData;
       currentChunkIndex++;
       const finished = currentChunkIndex >= chunkBoundaries.length;
       updateStatus(finished ? 'Adaptation complete!' : `Chunk ${currentChunkIndex} complete. Ready for next.`, 'green');
@@ -281,10 +290,28 @@
     }
   }
 
-  function generateStoryMemorySummary(adaptedScript) {
-    const characterMatches = adaptedScript.match(/\b[A-Z]{2,}\b/g) || [];
-    const uniqueCharacters = [...new Set(characterMatches)].join(', ') || 'No characters identified';
-    return `Known Characters: ${uniqueCharacters}\nPlot Points: (to be expanded by user)\nThemes: (to be expanded by user)`;
+  async function extractSemanticSummary(scriptText) {
+    if (!scriptText || scriptText.trim().length < 100) { // Don't run on empty or very short text
+        return "Story summary will appear here as the script is adapted.";
+    }
+
+    const summaryPrompt = `Analyze the following screenplay text and extract a concise summary of its key elements. Structure your response clearly under these headings:
+
+- **Characters:** List the main characters and a brief, one-sentence description of their role or defining trait.
+- **Plot Points:** Outline the major plot developments that have occurred so far in a bulleted list.
+- **Themes:** Identify the core underlying themes or ideas being explored.
+
+The screenplay so far:
+"""
+${scriptText.slice(-5000)}
+"""
+`;
+    // Using a simpler system prompt for this specific task
+    const summarySystemPrompt = "You are an expert screenplay analyst AI. Your task is to extract key story elements from a script.";
+
+    // We can reuse the main callApi function
+    const summary = await callApi(summarySystemPrompt, summaryPrompt);
+    return summary;
   }
 
   async function callApi(systemPrompt, userPrompt) {
@@ -296,7 +323,7 @@
 
       const MAX_OUTPUT = 4096;
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
       const payload = {
         contents: [{ parts: [{ text: userPrompt }] }],
         systemInstruction: { parts: [{ text: systemPrompt }] },
