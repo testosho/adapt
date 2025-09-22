@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Screenplay Adaptation Studio - LM Studio Integration</title>
+<title>Screenplay Adaptation Studio - Fully Automatic Adaptation</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.18/mammoth.browser.min.js"></script>
@@ -11,23 +11,130 @@
   @import url('https://rsms.me/inter/inter.css');
   body { font-family: 'Inter', sans-serif; }
   .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-  textarea, .editor-panel { scrollbar-width: thin; scrollbar-color: #4a5568 #2d3748; }
+
+  textarea, .editor-panel {
+    scrollbar-width: thin;
+    scrollbar-color: #4a5568 #2d3748;
+    resize: none;
+  }
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-track { background: #2d3748; }
   ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: #718096; }
-  textarea:focus, input:focus { outline: none; box-shadow: none; border-color: #4a90e2; }
+  textarea:focus, input:focus {
+    outline: none;
+    box-shadow: none;
+    border-color: #4a90e2;
+  }
+
+  /* Layout improvements for resizable panels */
+  body, html, #editor-view {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #editor-view {
+    flex-grow: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  #side-panel {
+    width: 15%;
+    min-width: 280px;
+    background-color: #2d3748;
+    padding: 1.5rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    resize: horizontal;
+    border-right: 3px solid #4a5568;
+  }
+
+  #script-panels {
+    display: flex;
+    flex-grow: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #original-panel,
+  #adapted-panel {
+    flex-grow: 1;
+    min-width: 100px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-left: 3px solid #4a5568;
+    resize: horizontal;
+  }
+
+  #original-panel {
+    border-left: none;
+  }
+
+  #originalScriptViewer,
+  #adaptedScriptEditor {
+    background-color: #1a202c;
+    color: #cbd5e1;
+    font-family: monospace;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    padding: 1rem;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    border: none;
+    resize: none;
+  }
+
+  /* Chunk links container */
+  #chunkLinksContainer {
+    max-height: 120px;
+    overflow-y: auto;
+    background: #1a202c;
+    border: 1px solid #4a5568;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-top: 8px;
+    user-select: none;
+  }
+  #chunkLinksContainer button {
+    background-color: transparent;
+    border: none;
+    color: #63b3ed;
+    margin: 0 4px 4px 0;
+    padding: 4px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: background-color 0.2s ease;
+  }
+  #chunkLinksContainer button:hover,
+  #chunkLinksContainer button.active {
+    background-color: #3182ce;
+    color: white;
+  }
+
+  /* Buttons consistent styling */
+  button {
+    font-weight: bold;
+  }
+
 </style>
 </head>
-<body class="bg-gray-900 text-white overflow-hidden h-screen">
+<body class="bg-gray-900 text-white">
 
 <!-- SETUP VIEW -->
-<div id="setup-view" class="flex items-center justify-center h-full p-6">
+<div id="setup-view" class="flex items-center justify-center h-screen p-6">
   <div class="max-w-3xl w-full bg-gray-800 p-8 rounded-2xl shadow-2xl space-y-6 overflow-y-auto max-h-[90vh]">
     <header class="text-center">
       <h1 class="text-3xl font-bold text-blue-400">Screenplay Adaptation Studio</h1>
-      <p class="text-gray-400 mt-2">Transform your script for any language, culture, or setting with AI-guided hierarchical writing workflow.</p>
+      <p class="text-gray-400 mt-2">Upload your screenplay and adapt it automatically with AI.</p>
     </header>
 
     <!-- API Selection -->
@@ -42,7 +149,7 @@
         <label class="bg-gray-700 p-4 rounded-lg cursor-pointer border-2 border-transparent has-[:checked]:border-blue-500 has-[:checked]:bg-gray-900 transition-all">
           <input type="radio" name="apiSelection" value="local" class="hidden">
           <h3 class="font-bold text-white">Local Server (e.g., LM Studio)</h3>
-          <p class="text-xs text-gray-400 mt-1">Private, offline processing. Requires a local server to be running.</p>
+          <p class="text-xs text-gray-400 mt-1">Private, offline processing. Requires your local server running.</p>
         </label>
       </div>
     </section>
@@ -54,9 +161,9 @@
         <input type="password" id="apiKey" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" placeholder="Enter your Google AI Studio API Key" />
       </div>
       <div id="local-form" class="hidden space-y-2">
-        <label for="apiUrl" class="text-sm font-medium text-gray-300">Local Server URL</label>
+        <label for="apiUrl" class="text-sm font-medium text-gray-300">Local Server Base URL</label>
         <input type="text" id="apiUrl" value="http://localhost:1234" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" />
-        <p class="text-xs text-gray-400 mt-1">Do not include path. Only base URL (e.g. http://localhost:1234)</p>
+        <p class="text-xs text-gray-400 mt-1">Do not add path, just base URL like http://localhost:1234</p>
       </div>
     </section>
 
@@ -67,65 +174,54 @@
       <p id="fileStatus" class="text-xs text-gray-400 mt-2">Upload a PDF, DOCX, Fountain, or Plain Text file.</p>
     </section>
 
-    <!-- Beat Sheet / Outline Upload or type -->
+    <!-- Beat Sheet -->
     <section>
       <h2 class="font-semibold mb-3 text-lg">3. Define Screenplay Structure (Beat Sheet)</h2>
-      <textarea id="beatSheetInput" rows="5" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 placeholder-gray-500" placeholder="Paste or type your story beats (e.g., Act 1: Setup, Act 2: Conflict, etc.)"></textarea>
-      <p class="text-xs text-gray-500 mt-1">Optional but recommended for better chunking and coherence.</p>
+      <textarea id="beatSheetInput" rows="5" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 placeholder-gray-500" placeholder="Paste or type your story beats (one per line, eg 'Act 1', 'Act 2', 'Resolution')"></textarea>
+      <p class="text-xs text-gray-500 mt-1">Optional but helps AI maintain coherence by chunking by beats.</p>
     </section>
 
-    <button id="viewScriptButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 flex items-center justify-center text-lg disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Load & Enter Studio</button>
+    <div>
+      <label class="block text-gray-400 mt-6 font-semibold">Story Memory Summary</label>
+      <textarea id="storyMemory" rows="3" readonly class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 resize-none"></textarea>
+    </div>
 
-    <button id="testLocalApiButton" class="mt-4 w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 flex items-center justify-center text-lg">
-      Test Local API Connection
+    <!-- Chunk Links Container -->
+    <div id="chunkLinksContainer" aria-label="Click chunks to review adapted parts"></div>
+
+    <button id="adaptationButton" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 text-lg flex justify-center items-center space-x-2">
+      <span>Generate Adaptation</span>
+      <div id="continueLoader" class="loader hidden"></div>
     </button>
-    <p id="apiTestStatus" class="text-xs mt-2 text-center"></p>
 
+    <p id="appStatus" class="text-center text-yellow-400 mt-4 h-8"></p>
   </div>
 </div>
 
 <!-- EDITOR VIEW -->
-<div id="editor-view" class="hidden flex h-screen overflow-hidden">
-  <!-- Left Panel: Controls and Story Memory -->
-  <div class="w-1/4 bg-gray-800 p-6 flex flex-col h-full overflow-auto">
-    <h2 class="text-xl font-bold text-blue-400 border-b border-gray-600 pb-3 mb-4">Adaptation Controls & Story Memory</h2>
-
-    <div class="space-y-4">
-      <label for="targetLanguage" class="text-sm font-medium text-gray-300">Target Language</label>
-      <input type="text" id="targetLanguage" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" placeholder="e.g., Japanese" />
-
-      <label for="targetCulture" class="text-sm font-medium text-gray-300">Target Culture / Nation</label>
-      <input type="text" id="targetCulture" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" placeholder="e.g., Modern-day Tokyo" />
-
-      <label for="manualChanges" class="text-sm font-medium text-gray-300">Core Instructions & Changes</label>
-      <textarea id="manualChanges" rows="5" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" placeholder="e.g., Change protagonist to a software engineer. Make the tone more comedic."></textarea>
-
-      <label class="text-sm font-medium text-gray-300 mt-4">Story Memory (Characters, Plot Points, Themes)</label>
-      <textarea id="storyMemory" rows="8" readonly class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-400 overflow-auto"></textarea>
-    </div>
-
-    <p id="appStatus" class="text-center text-yellow-400 my-4 h-8"></p>
-
-    <div class="space-y-3 pt-4 border-t border-gray-600">
-      <button id="continueButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center space-x-2">
-        <span id="continueText">Generate Next Part</span>
-        <div id="continueLoader" class="loader hidden"></div>
-      </button>
-      <button id="downloadButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Download Adapted Script</button>
-      <button id="resetButton" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Start Over</button>
-    </div>
+<div id="editor-view" style="display:none; height:100%;">
+  <div id="side-panel">
+    <h2 class="text-xl font-bold text-blue-400 mb-4">Adaptation Controls & Navigation</h2>
+    <label for="targetLanguage" class="text-sm font-medium text-gray-300">Target Language</label>
+    <input type="text" id="targetLanguage" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm mb-4" placeholder="e.g., Japanese" />
+    <label for="targetCulture" class="text-sm font-medium text-gray-300">Target Culture / Nation</label>
+    <input type="text" id="targetCulture" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm mb-4" placeholder="e.g., Modern-day Tokyo" />
+    <label for="manualChanges" class="text-sm font-medium text-gray-300">Core Instructions & Changes</label>
+    <textarea id="manualChanges" rows="5" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm resize-none" placeholder="E.g., Change protagonist to a software engineer. Make tone comedic."></textarea>
+    <p class="text-xs text-gray-400 mt-2">Use the buttons below to re-generate or download adapted script.</p>
+    <button id="downloadButton" class="mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md w-full">Download Adapted Script</button>
+    <button id="resetButton" class="mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md w-full">Start Over</button>
   </div>
 
-  <!-- Middle Panel: Original Script -->
-  <div class="w-3/8 bg-gray-800 border-l border-r border-gray-700 flex flex-col overflow-auto">
-    <h3 class="text-lg font-semibold p-4 border-b border-gray-700 bg-gray-900">Original Script</h3>
-    <textarea id="originalScriptViewer" class="editor-panel w-full h-full bg-gray-800 p-4 text-gray-300 font-mono text-sm leading-relaxed resize-none" readonly>Original script will be displayed here...</textarea>
-  </div>
-
-  <!-- Right Panel: Adapted Script -->
-  <div class="w-3/8 flex flex-col overflow-auto">
-    <h3 class="text-lg font-semibold p-4 border-b border-gray-700 bg-gray-900">Adapted Script (Editable)</h3>
-    <textarea id="adaptedScriptEditor" class="editor-panel w-full h-full bg-black p-4 text-white font-mono text-sm leading-relaxed resize-none" placeholder="AI-generated adaptation will appear here. You can edit this text at any time."></textarea>
+  <div id="script-panels">
+    <div id="original-panel">
+      <h3 class="p-2 bg-gray-900 border-b border-gray-700 text-lg font-semibold text-gray-300">Original Script</h3>
+      <textarea id="originalScriptViewer" class="editor-panel" readonly placeholder="Original script will appear here..."></textarea>
+    </div>
+    <div id="adapted-panel">
+      <h3 class="p-2 bg-gray-900 border-b border-gray-700 text-lg font-semibold text-gray-300">Adapted Script (Editable)</h3>
+      <textarea id="adaptedScriptEditor" class="editor-panel" placeholder="AI-generated adapted script will appear here. You can edit at any time."></textarea>
+    </div>
   </div>
 </div>
 
@@ -138,9 +234,7 @@
   const localForm = document.getElementById('local-form');
   const fileInput = document.getElementById('fileInput');
   const fileStatus = document.getElementById('fileStatus');
-  const viewScriptButton = document.getElementById('viewScriptButton');
-  const continueButton = document.getElementById('continueButton');
-  const continueText = document.getElementById('continueText');
+  const adaptationButton = document.getElementById('adaptationButton');
   const continueLoader = document.getElementById('continueLoader');
   const originalScriptViewer = document.getElementById('originalScriptViewer');
   const adaptedScriptEditor = document.getElementById('adaptedScriptEditor');
@@ -149,63 +243,80 @@
   const resetButton = document.getElementById('resetButton');
   const storyMemory = document.getElementById('storyMemory');
   const beatSheetInput = document.getElementById('beatSheetInput');
-  const testLocalApiButton = document.getElementById('testLocalApiButton');
-  const apiTestStatus = document.getElementById('apiTestStatus');
+  const chunkLinksContainer = document.getElementById('chunkLinksContainer');
+  const targetLanguageInput = document.getElementById('targetLanguage');
+  const targetCultureInput = document.getElementById('targetCulture');
+  const manualChangesInput = document.getElementById('manualChanges');
 
-  // State Variables
+  // State
   let originalScriptContent = '';
-  let currentChunkIndex = 0;
   let chunkBoundaries = [];
+  let adaptedChunks = [];
+  let currentChunkIndex = 0;
   let storyMemoryData = '';
 
-  // Constants
   const DEFAULT_CHUNK_SIZE = 7000;
 
-  // Event listeners
+  // Event Listeners
   apiSelectionRadios.forEach(radio => radio.addEventListener('change', toggleApiForm));
   fileInput.addEventListener('change', handleFileUpload);
-  viewScriptButton.addEventListener('click', showEditorView);
-  continueButton.addEventListener('click', generateNextPart);
-  resetButton.addEventListener('click', () => location.reload());
+  adaptationButton.addEventListener('click', startFullAdaptation);
   downloadButton.addEventListener('click', downloadScript);
-  [originalScriptViewer, adaptedScriptEditor].forEach(el => el.addEventListener('scroll', syncScroll));
-  testLocalApiButton.addEventListener('click', testLocalApiConnection);
+  resetButton.addEventListener('click', () => location.reload());
+  chunkLinksContainer.addEventListener('click', onChunkLinkClick);
 
+  // Toggle API form visibility and reset state
   function toggleApiForm(event) {
     if (event.target.value === 'gemini') {
       geminiForm.classList.remove('hidden');
       localForm.classList.add('hidden');
-      apiTestStatus.textContent = '';
     } else {
       geminiForm.classList.add('hidden');
       localForm.classList.remove('hidden');
-      apiTestStatus.textContent = '';
     }
+    resetState();
+  }
+
+  function resetState() {
+    chunkBoundaries = [];
+    adaptedChunks = [];
+    currentChunkIndex = 0;
+    storyMemory.value = '';
+    chunkLinksContainer.innerHTML = '';
+    adaptedScriptEditor.value = '';
+    appStatus.textContent = '';
   }
 
   async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    viewScriptButton.disabled = true;
+    adaptationButton.disabled = true;
     fileStatus.textContent = `Parsing "${file.name}"...`;
     fileStatus.classList.remove('text-green-500', 'text-red-500');
+    resetState();
 
     try {
-      const extension = file.name.split('.').pop().toLowerCase();
-      let textContent = '';
-      if (extension === 'pdf') textContent = await parsePdf(file);
-      else if (extension === 'docx') textContent = await parseDocx(file);
-      else if (['fountain', 'txt'].includes(extension)) textContent = await file.text();
+      const ext = file.name.split('.').pop().toLowerCase();
+      let text = '';
+      if (ext === 'pdf') text = await parsePdf(file);
+      else if (ext === 'docx') text = await parseDocx(file);
+      else if (['fountain', 'txt'].includes(ext)) text = await file.text();
       else throw new Error('Unsupported file type.');
 
-      originalScriptContent = textContent.trim();
+      originalScriptContent = text.trim();
       fileStatus.textContent = `✅ Loaded: ${file.name} (Length: ${originalScriptContent.length} chars)`;
       fileStatus.classList.add('text-green-500');
 
       createChunkBoundaries();
-      viewScriptButton.disabled = false;
-    } catch (error) {
-      fileStatus.textContent = `Error: ${error.message}`;
+
+      adaptationButton.disabled = false;
+
+      originalScriptViewer.value = originalScriptContent;
+
+      setupView.style.display = 'none';
+      editorView.style.display = 'flex';
+    } catch (e) {
+      fileStatus.textContent = `Error: ${e.message}`;
       fileStatus.classList.add('text-red-500');
     }
   }
@@ -219,111 +330,145 @@
       const approxChunkSize = Math.floor(originalScriptContent.length / beats.length);
       let start = 0;
       beats.forEach((beat, idx) => {
-        let end = (idx < beats.length - 1) ? start + approxChunkSize : originalScriptContent.length;
+        const end = idx < beats.length - 1 ? start + approxChunkSize : originalScriptContent.length;
         chunkBoundaries.push({ start, end });
         start = end;
       });
     } else {
-      const length = originalScriptContent.length;
       let start = 0;
-      while (start < length) {
-        let end = Math.min(start + DEFAULT_CHUNK_SIZE, length);
+      while (start < originalScriptContent.length) {
+        const end = Math.min(start + DEFAULT_CHUNK_SIZE, originalScriptContent.length);
         chunkBoundaries.push({ start, end });
         start = end;
       }
     }
   }
 
-  function showEditorView() {
-    if (!originalScriptContent) return;
-    originalScriptViewer.value = originalScriptContent;
-    setupView.classList.add('hidden');
-    editorView.classList.remove('hidden');
-    updateStatus('Ready. Enter parameters and generate the first part.', 'green');
-  }
+  async function startFullAdaptation() {
+    adaptationButton.disabled = true;
+    adaptationButton.querySelector('span').textContent = 'Adapting Full Script...';
+    continueLoader.classList.remove('hidden');
+    adaptedChunks = [];
+    storyMemoryData = '';
+    currentChunkIndex = 0;
 
-  async function generateNextPart() {
-    if (currentChunkIndex >= chunkBoundaries.length) {
-      updateStatus('Adaptation complete!', 'green');
-      setContinueButtonLoading(false, true);
-      return;
-    }
-    setContinueButtonLoading(true);
-
-    const { start, end } = chunkBoundaries[currentChunkIndex];
-    const scriptChunk = originalScriptContent.substring(start, end).trim();
-    const progress = Math.round(((currentChunkIndex + 1) / chunkBoundaries.length) * 100);
-    updateStatus(`Adapting chunk ${currentChunkIndex + 1} of ${chunkBoundaries.length}... (${progress}%)`, 'yellow');
-
-    storyMemoryData = generateStoryMemorySummary(adaptedScriptEditor.value);
-
-    const systemPrompt = `You are a world-class screenplay adapter AI specialized in feature film scripts. Adapt the screenplay chunk provided, respecting the target language, culture, and core instructions. Maintain character names, plot points, and tone as defined in prior adapted material. Use the Story Memory to maintain continuity:\n${storyMemoryData}`;
-
-    let userPrompt = `Parameters:\n- Target Language: ${document.getElementById('targetLanguage').value || 'as in original'}\n- Target Culture/Nation: ${document.getElementById('targetCulture').value || 'as in original'}\n- Core Instructions: ${document.getElementById('manualChanges').value || 'None'}\n\n---\nOriginal Screenplay Chunk:\n"""${scriptChunk}"""\n\nPlease provide ONLY the adapted version of THIS CHUNK without introductory phrases.`;
-
-    if (adaptedScriptEditor.value.length > 500) {
-      const recentContext = adaptedScriptEditor.value.slice(-500);
-      userPrompt = `Previous Adapted Context:\n"""${recentContext}"""\n\n` + userPrompt;
-    }
+    adaptedScriptEditor.value = '';
+    chunkLinksContainer.innerHTML = '';
+    appStatus.textContent = '';
 
     try {
-      const adaptedText = await callApi(systemPrompt, userPrompt);
-      adaptedScriptEditor.value += (adaptedScriptEditor.value.length > 0 ? '\n\n' : '') + adaptedText;
-      adaptedScriptEditor.scrollTop = adaptedScriptEditor.scrollHeight;
-      storyMemory.value = storyMemoryData;
-      currentChunkIndex++;
-      const finished = currentChunkIndex >= chunkBoundaries.length;
-      updateStatus(finished ? 'Adaptation complete!' : `Chunk ${currentChunkIndex} complete. Ready for next.`, 'green');
-      setContinueButtonLoading(false, finished);
+      for (; currentChunkIndex < chunkBoundaries.length; currentChunkIndex++) {
+        appStatus.textContent = `Adapting chunk ${currentChunkIndex + 1} of ${chunkBoundaries.length}...`;
+
+        const { start, end } = chunkBoundaries[currentChunkIndex];
+        const chunkText = originalScriptContent.substring(start, end).trim();
+
+        const systemPrompt = `You are a world-class screenplay adapter AI specialized in feature film scripts. Use previous context and story memory:\n${storyMemoryData}`;
+
+        let userPrompt = `Parameters:\n- Target Language: ${targetLanguageInput.value || 'as in original'}\n- Target Culture/Nation: ${targetCultureInput.value || 'as in original'}\n- Core Instructions: ${manualChangesInput.value || 'None'}\n\n---\nOriginal Screenplay Chunk:\n"""${chunkText}"""\n\nPlease provide only the adapted version of this chunk.`;
+
+        if (adaptedChunks.length > 0) {
+          const recentContext = adaptedChunks.slice(-2).join('\n\n').slice(-500);
+          userPrompt = `Previous Adapted Context:\n"""${recentContext}"""\n\n` + userPrompt;
+        }
+
+        const adaptedText = await callApi(systemPrompt, userPrompt);
+
+        adaptedChunks.push(adaptedText);
+
+        storyMemoryData = generateStoryMemorySummary(adaptedChunks.join('\n\n'));
+        storyMemory.value = storyMemoryData;
+
+        updateChunkLinksUI();
+
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      adaptedScriptEditor.value = adaptedChunks.join('\n\n');
+      appStatus.textContent = 'Adaptation complete!';
+      markFullAdaptationActive();
     } catch (error) {
-      updateStatus(`Error: ${error.message}`, 'red');
-      setContinueButtonLoading(false);
+      appStatus.textContent = 'Error during adaptation: ' + error.message;
+    } finally {
+      adaptationButton.disabled = false;
+      adaptationButton.querySelector('span').textContent = 'Generate Adaptation';
+      continueLoader.classList.add('hidden');
     }
   }
 
-  function generateStoryMemorySummary(adaptedScript) {
-    const characterMatches = adaptedScript.match(/\b[A-Z]{2,}\b/g) || [];
-    const uniqueCharacters = [...new Set(characterMatches)].join(', ') || 'No characters identified';
-    return `Known Characters: ${uniqueCharacters}\nPlot Points: (to be expanded by user)\nThemes: (to be expanded by user)`;
+  function updateChunkLinksUI() {
+    chunkLinksContainer.innerHTML = '';
+    adaptedChunks.forEach((text, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = `Chunk ${i + 1}`;
+      btn.dataset.index = i;
+      if (i === currentChunkIndex - 1) btn.classList.add('active');
+      chunkLinksContainer.appendChild(btn);
+    });
+    if (adaptedChunks.length === chunkBoundaries.length) {
+      const fullBtn = document.createElement('button');
+      fullBtn.textContent = 'Full Adaptation';
+      fullBtn.dataset.index = 'full';
+      fullBtn.classList.add('active');
+      chunkLinksContainer.appendChild(fullBtn);
+    }
+  }
+
+  function onChunkLinkClick(e) {
+    if (e.target.tagName !== 'BUTTON') return;
+    const idx = e.target.dataset.index;
+    let content = '';
+    if (idx === 'full') {
+      content = adaptedChunks.join('\n\n');
+    } else {
+      const i = parseInt(idx, 10);
+      content = adaptedChunks[i] || '';
+    }
+    adaptedScriptEditor.value = content;
+
+    [...chunkLinksContainer.children].forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+  }
+
+  function markFullAdaptationActive() {
+    [...chunkLinksContainer.children].forEach(b => b.classList.remove('active'));
+    const fullBtn = [...chunkLinksContainer.children].find(btn => btn.dataset.index === 'full');
+    if (fullBtn) fullBtn.classList.add('active');
+  }
+
+  function generateStoryMemorySummary(adaptedText) {
+    const matches = adaptedText.match(/\b[A-Z]{2,}\b/g) || [];
+    const unique = [...new Set(matches)].join(', ') || 'No characters identified';
+    return `Known Characters: ${unique}\nPlot Points: (expand manually)\nThemes: (expand manually)`;
   }
 
   async function callApi(systemPrompt, userPrompt) {
     const selectedApi = document.querySelector('input[name="apiSelection"]:checked').value;
-
     if (selectedApi === 'gemini') {
       const apiKey = document.getElementById('apiKey').value.trim();
       if (!apiKey) throw new Error('Gemini API Key is missing.');
-
       const MAX_OUTPUT = 4096;
-
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       const payload = {
         contents: [{ parts: [{ text: userPrompt }] }],
         systemInstruction: { parts: [{ text: systemPrompt }] },
         generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT }
       };
-
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(`API Error: ${err.error?.message || response.statusText}`);
       }
-
       const result = await response.json();
       return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-
     } else {
       let baseUrl = document.getElementById('apiUrl').value.trim();
       if (!baseUrl) throw new Error('Local Server URL is missing.');
-
-      // API expects /v1/chat/completions path appended internally
       const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
-
       const payload = {
         model: "local-model",
         messages: [
@@ -334,57 +479,27 @@
         max_tokens: 2048,
         stream: false
       };
-
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          const errJson = await response.json().catch(() => ({}));
-          throw new Error(`API Error: ${errJson.error?.message || response.statusText}`);
-        }
-
-        const result = await response.json();
-        if (!result.choices || !result.choices[0].message || !result.choices[0].message.content) {
-          throw new Error('Unexpected local API response structure');
-        }
-        return result.choices[0].message.content.trim();
-
-      } catch (err) {
-        console.error('Local API error:', err);
-        throw new Error(`Local API request failed: ${err.message}`);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(`API Error: ${errJson.error?.message || response.statusText}`);
       }
+      const result = await response.json();
+      if (!result.choices || !result.choices[0].message || !result.choices[0].message.content) {
+        throw new Error('Unexpected local API response structure');
+      }
+      return result.choices[0].message.content.trim();
     }
   }
 
-  // UI Helpers
-  function setContinueButtonLoading(isLoading, finished = false) {
-    continueButton.disabled = isLoading || finished;
-    if (finished) {
-      continueText.textContent = 'Finished';
-      continueButton.classList.replace('bg-blue-600', 'bg-gray-500');
-    } else if (isLoading) {
-      continueText.classList.add('hidden');
-      continueLoader.classList.remove('hidden');
-    } else {
-      continueText.textContent = 'Generate Next Part';
-      continueText.classList.remove('hidden');
-      continueLoader.classList.add('hidden');
-    }
-  }
-
-  function updateStatus(message, color) {
-    const colorClass = { green: 'text-green-400', yellow: 'text-yellow-400', red: 'text-red-400' };
-    appStatus.textContent = message;
-    appStatus.className = `text-sm text-center my-4 h-8 ${colorClass[color] || 'text-gray-400'}`;
-  }
-
+  // Download adapted script as txt file
   function downloadScript() {
     const text = adaptedScriptEditor.value;
-    if (!text || text.trim() === '') {
+    if (!text.trim()) {
       alert('No adapted script to download.');
       return;
     }
@@ -399,20 +514,7 @@
     URL.revokeObjectURL(url);
   }
 
-  let scrollTimeout;
-  function syncScroll(event) {
-    clearTimeout(scrollTimeout);
-    const sourceElement = event.target;
-    const targetElement = sourceElement.id === 'originalScriptViewer' ? adaptedScriptEditor : originalScriptViewer;
-
-    const scrollPercentage = sourceElement.scrollTop / (sourceElement.scrollHeight - sourceElement.clientHeight);
-    targetElement.scrollTop = scrollPercentage * (targetElement.scrollHeight - targetElement.clientHeight);
-
-    targetElement.removeEventListener('scroll', syncScroll);
-    scrollTimeout = setTimeout(() => targetElement.addEventListener('scroll', syncScroll), 100);
-  }
-
-  // Parsing Helpers
+  // Parsing Helpers for file uploads 
   async function parsePdf(file) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
     const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
@@ -429,65 +531,6 @@
     const arrayBuffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer });
     return result.value;
-  }
-
-  async function testLocalApiConnection() {
-    apiTestStatus.textContent = '';
-    if (document.querySelector('input[name="apiSelection"]:checked').value !== 'local') {
-      apiTestStatus.textContent = 'Switch to Local Server option to test local API.';
-      apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
-      return;
-    }
-
-    const baseUrl = document.getElementById('apiUrl').value.trim();
-    if (!baseUrl) {
-      apiTestStatus.textContent = 'Local Server URL is empty.';
-      apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
-      return;
-    }
-
-    apiTestStatus.textContent = 'Testing connection...';
-    apiTestStatus.className = 'text-xs mt-2 text-center text-yellow-400';
-
-    // Test payload similar to the production call with minimal tokens and a ping message
-    const testPayload = {
-      model: "local-model",
-      messages: [
-        { role: "system", content: "Connectivity test." },
-        { role: "user", content: "Ping" }
-      ],
-      temperature: 0,
-      max_tokens: 5,
-      stream: false
-    };
-
-    try {
-      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testPayload)
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        apiTestStatus.textContent = `Error: ${err.error?.message || response.statusText}`;
-        apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data.choices && data.choices[0]?.message?.content) {
-        apiTestStatus.textContent = 'Local API connection successful!';
-        apiTestStatus.className = 'text-xs mt-2 text-center text-green-500';
-      } else {
-        apiTestStatus.textContent = 'Unexpected response format from local API.';
-        apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
-      }
-    } catch (error) {
-      apiTestStatus.textContent = `Connection failed: ${error.message}`;
-      apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
-    }
   }
 </script>
 </body>
