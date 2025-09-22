@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screenplay Adaptation Studio</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- pdf.js for parsing PDF files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <!-- mammoth.js for parsing DOCX files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.18/mammoth.browser.min.js"></script>
+    <style>
+        /* Custom styles for a better look and feel */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://rsms.me/inter/inter.css');
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Left Panel: Controls -->
+        <div class="w-full md:w-1/3 lg:w-1/4 bg-gray-800 p-6 space-y-6 overflow-y-auto h-screen sticky top-0">
+            <header>
+                <h1 class="text-2xl font-bold text-blue-400">Adaptation Studio</h1>
+                <p class="text-sm text-gray-400">Adapt screenplays using AI</p>
+            </header>
+
+            <!-- 1. API Configuration -->
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h2 class="font-semibold mb-3 border-b border-gray-600 pb-2">API Configuration</h2>
+                <div class="space-y-3">
+                    <div>
+                        <label for="apiKey" class="text-sm font-medium text-gray-300">Gemini API Key</label>
+                        <input type="password" id="apiKey" class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 mt-1 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your API Key">
+                    </div>
+                    <div>
+                        <label for="apiUrl" class="text-sm font-medium text-gray-300">API Endpoint URL</label>
+                        <input type="text" id="apiUrl" value="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent" class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 mt-1 text-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Screenplay Upload -->
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h2 class="font-semibold mb-3 border-b border-gray-600 pb-2">Upload Screenplay</h2>
+                <input type="file" id="fileInput" accept=".pdf,.docx,.fountain,.txt" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600">
+                <p id="fileStatus" class="text-xs text-gray-400 mt-2">Upload a PDF, DOCX, or Fountain file.</p>
+            </div>
+
+            <!-- 3. Adaptation Parameters -->
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h2 class="font-semibold mb-3 border-b border-gray-600 pb-2">Adaptation Parameters</h2>
+                <div class="space-y-3">
+                    <div>
+                        <label for="targetLanguage" class="text-sm font-medium text-gray-300">Target Language</label>
+                        <input type="text" id="targetLanguage" class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 mt-1 text-sm" placeholder="e.g., Japanese">
+                    </div>
+                    <div>
+                        <label for="targetCulture" class="text-sm font-medium text-gray-300">Target Culture / Nation</label>
+                        <input type="text" id="targetCulture" class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 mt-1 text-sm" placeholder="e.g., Modern-day Tokyo, Japan">
+                    </div>
+                    <div>
+                        <label for="manualChanges" class="text-sm font-medium text-gray-300">Manual Changes & Instructions</label>
+                        <textarea id="manualChanges" rows="4" class="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-2 mt-1 text-sm" placeholder="e.g., Change the protagonist's profession to a software engineer. Make the tone more comedic."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Action Buttons -->
+            <div>
+                <button id="startButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 flex items-center justify-center space-x-2" disabled>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Start Adaptation Task</span>
+                </button>
+                <button id="continueButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md mt-3 transition duration-300 flex items-center justify-center space-x-2 hidden">
+                     <span id="continueText">Generate Next Part</span>
+                     <div id="continueLoader" class="loader hidden"></div>
+                </button>
+            </div>
+             <p id="appStatus" class="text-sm text-yellow-400 text-center"></p>
+
+        </div>
+
+        <!-- Right Panel: Output -->
+        <div class="w-full md:w-2/3 lg:w-3/4 p-6">
+            <h2 class="text-xl font-semibold mb-4">Adapted Screenplay Output</h2>
+            <div id="output" class="w-full h-[85vh] bg-gray-800 rounded-lg p-6 overflow-y-auto text-gray-300 whitespace-pre-wrap font-mono text-sm leading-relaxed">
+                <!-- AI-generated content will appear here -->
+                Awaiting screenplay and instructions...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const apiKeyInput = document.getElementById('apiKey');
+        const apiUrlInput = document.getElementById('apiUrl');
+        const fileInput = document.getElementById('fileInput');
+        const fileStatus = document.getElementById('fileStatus');
+        const startButton = document.getElementById('startButton');
+        const continueButton = document.getElementById('continueButton');
+        const continueText = document.getElementById('continueText');
+        const continueLoader = document.getElementById('continueLoader');
+        const outputDiv = document.getElementById('output');
+        const appStatus = document.getElementById('appStatus');
+
+        // State variables
+        let originalScriptContent = '';
+        let adaptedScriptParts = [];
+        let currentChunkIndex = 0;
+        const CHUNK_SIZE = 7000; // Characters per API call, adjustable
+
+        // --- Event Listeners ---
+        
+        fileInput.addEventListener('change', handleFileUpload);
+        startButton.addEventListener('click', startAdaptationTask);
+        continueButton.addEventListener('click', generateNextPart);
+
+        // --- Core Functions ---
+
+        /**
+         * Handles the file upload and parsing based on file type.
+         */
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            resetState();
+            updateStatus(`Parsing "${file.name}"...`, 'yellow');
+
+            try {
+                const extension = file.name.split('.').pop().toLowerCase();
+                let textContent = '';
+
+                if (extension === 'pdf') {
+                    textContent = await parsePdf(file);
+                } else if (extension === 'docx') {
+                    textContent = await parseDocx(file);
+                } else if (['fountain', 'txt'].includes(extension)) {
+                    textContent = await file.text();
+                } else {
+                    throw new Error('Unsupported file type. Please use PDF, DOCX, or Fountain/TXT.');
+                }
+                
+                originalScriptContent = textContent;
+                fileStatus.textContent = `✅ Loaded: ${file.name} (~${Math.round(originalScriptContent.length / 1000)}k chars)`;
+                fileStatus.classList.remove('text-red-500');
+                fileStatus.classList.add('text-green-500');
+                startButton.disabled = false;
+                updateStatus('Ready to start adaptation.', 'green');
+                // Show a preview
+                outputDiv.textContent = "Original Script Preview:\n\n" + originalScriptContent.substring(0, 2000) + '...';
+
+            } catch (error) {
+                console.error('File parsing error:', error);
+                fileStatus.textContent = `Error: ${error.message}`;
+                fileStatus.classList.add('text-red-500');
+                updateStatus('File parsing failed.', 'red');
+                startButton.disabled = true;
+            }
+        }
+
+        /**
+         * Resets the application state to start a new task.
+         */
+        function resetState() {
+            originalScriptContent = '';
+            adaptedScriptParts = [];
+            currentChunkIndex = 0;
+            startButton.disabled = true;
+            continueButton.classList.add('hidden');
+            outputDiv.textContent = 'Awaiting screenplay and instructions...';
+        }
+
+        /**
+         * Kicks off the adaptation process.
+         */
+        function startAdaptationTask() {
+            if (!originalScriptContent) {
+                updateStatus('Please upload a screenplay first.', 'red');
+                return;
+            }
+            if (!apiKeyInput.value) {
+                updateStatus('Please enter your Gemini API key.', 'red');
+                return;
+            }
+
+            adaptedScriptParts = [];
+            currentChunkIndex = 0;
+            outputDiv.textContent = ''; // Clear preview
+            continueButton.classList.remove('hidden');
+            startButton.classList.add('hidden');
+            
+            generateNextPart();
+        }
+
+        /**
+         * Generates the next part of the adapted screenplay by calling the Gemini API.
+         */
+        async function generateNextPart() {
+            setContinueButtonLoading(true);
+
+            const startIndex = currentChunkIndex * CHUNK_SIZE;
+            if (startIndex >= originalScriptContent.length) {
+                updateStatus('Adaptation complete!', 'green');
+                setContinueButtonLoading(false, true);
+                return;
+            }
+            
+            const endIndex = startIndex + CHUNK_SIZE;
+            const scriptChunk = originalScriptContent.substring(startIndex, endIndex);
+
+            const progress = Math.round((startIndex / originalScriptContent.length) * 100);
+            updateStatus(`Adapting part ${currentChunkIndex + 1}... (${progress}%)`, 'yellow');
+
+            // Constructing a detailed prompt for the AI
+            const systemPrompt = `You are a world-class screenplay adapter. Your task is to adapt a screenplay to a new language, culture, and setting.
+            You will receive the original screenplay in parts. Maintain consistency with character names, plot points, and tone across all parts.
+            This is a continuous task. Build upon the previous parts to create a cohesive, full-length adapted script.`;
+            
+            let userPrompt = `Adapt the following screenplay chunk based on these parameters:
+            - Target Language: ${document.getElementById('targetLanguage').value || 'as in original'}
+            - Target Culture/Nation: ${document.getElementById('targetCulture').value || 'as in original'}
+            - Specific Instructions: ${document.getElementById('manualChanges').value || 'None'}
+
+            ---
+            `;
+            
+            // Add context from the previously generated part to ensure continuity
+            if (adaptedScriptParts.length > 0) {
+                const lastPart = adaptedScriptParts[adaptedScriptParts.length - 1];
+                const context = lastPart.slice(-500); // Last 500 chars of the previous response
+                userPrompt += `CONTEXT from the end of the last adapted part (DO NOT REPEAT THIS):
+                "...${context}"
+                ---
+                `;
+            }
+
+            userPrompt += `ORIGINAL SCRIPT CHUNK (Part ${currentChunkIndex + 1}):
+            "${scriptChunk}"
+            
+            ---
+            Please provide ONLY the adapted version of THIS CHUNK.`;
+
+            try {
+                const result = await callGeminiAPI(systemPrompt, userPrompt);
+                adaptedScriptParts.push(result);
+                renderOutput();
+                currentChunkIndex++;
+                
+                if (currentChunkIndex * CHUNK_SIZE >= originalScriptContent.length) {
+                     updateStatus('Adaptation complete!', 'green');
+                     setContinueButtonLoading(false, true);
+                } else {
+                     updateStatus(`Part ${currentChunkIndex} finished. Ready for next part.`, 'green');
+                     setContinueButtonLoading(false);
+                }
+
+            } catch (error) {
+                console.error('API call failed:', error);
+                updateStatus(`Error: ${error.message}`, 'red');
+                setContinueButtonLoading(false);
+            }
+        }
+        
+        /**
+         * Makes the actual API call to Gemini.
+         * @param {string} systemPrompt - The system instruction for the model.
+         * @param {string} userPrompt - The user's prompt including the script chunk.
+         * @returns {Promise<string>} - The generated text from the model.
+         */
+        async function callGeminiAPI(systemPrompt, userPrompt) {
+            const apiKey = apiKeyInput.value;
+            const apiUrl = `${apiUrlInput.value}?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userPrompt }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                generationConfig: {
+                    temperature: 0.7,
+                    topK: 1,
+                    topP: 1,
+                    maxOutputTokens: 8192,
+                },
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.json();
+                throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody.error?.message || 'Unknown error'}`);
+            }
+
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (!text) {
+                throw new Error('No text content received from API.');
+            }
+            return text;
+        }
+
+
+        // --- UI and Helper Functions ---
+        
+        function renderOutput() {
+            outputDiv.innerHTML = '';
+            adaptedScriptParts.forEach((part, index) => {
+                const partHeader = document.createElement('h3');
+                partHeader.textContent = `--- Part ${index + 1} ---`;
+                partHeader.className = 'font-bold text-lg text-blue-300 my-4';
+                outputDiv.appendChild(partHeader);
+
+                const partContent = document.createElement('div');
+                partContent.textContent = part;
+                outputDiv.appendChild(partContent);
+            });
+            // Auto-scroll to the bottom
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        function setContinueButtonLoading(isLoading, isFinished = false) {
+            if (isFinished) {
+                continueButton.classList.add('hidden');
+                startButton.classList.remove('hidden');
+                startButton.textContent = 'Start New Task';
+                return;
+            }
+
+            continueButton.disabled = isLoading;
+            if (isLoading) {
+                continueText.classList.add('hidden');
+                continueLoader.classList.remove('hidden');
+            } else {
+                continueText.classList.remove('hidden');
+                continueLoader.classList.add('hidden');
+            }
+        }
+
+        function updateStatus(message, color) {
+            appStatus.textContent = message;
+            appStatus.className = `text-sm text-center text-${color}-400`;
+        }
+        
+        // --- File Parsing Utilities ---
+
+        /**
+         * Parses a .pdf file and extracts its text content.
+         * @param {File} file - The PDF file object.
+         * @returns {Promise<string>} - The extracted text.
+         */
+        async function parsePdf(file) {
+            const loadingTask = pdfjsLib.getDocument(URL.createObjectURL(file));
+            const pdf = await loadingTask.promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+            }
+            return fullText;
+        }
+
+        /**
+         * Parses a .docx file and extracts its text content.
+         * @param {File} file - The DOCX file object.
+         * @returns {Promise<string>} - The extracted text.
+         */
+        async function parseDocx(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            return result.value;
+        }
+        
+        // Set workerSrc for pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+    </script>
+</body>
+</html>
