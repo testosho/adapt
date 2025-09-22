@@ -117,16 +117,16 @@
   </div>
 
   <!-- Middle Panel: Original Script -->
-  <div class="w-3/8 bg-gray-800 border-l border-r border-gray-700 flex flex-col overflow-auto">
-    <h3 class="text-lg font-semibold p-4 border-b border-gray-700 bg-gray-900">Original Script</h3>
+  <div id="original-script-panel" style="flex-basis: 50%;" class="bg-gray-800 border-l border-r border-gray-700 flex flex-col overflow-auto">
+    <h3 class="text-lg font-semibold p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">Original Script</h3>
     <textarea id="originalScriptViewer" class="editor-panel w-full h-full bg-gray-800 p-4 text-gray-300 font-mono text-sm leading-relaxed resize-none" readonly>Original script will be displayed here...</textarea>
-  </div>
+</div>
 
-  <!-- Right Panel: Adapted Script -->
-  <div class="w-3/8 flex flex-col overflow-auto">
-    <h3 class="text-lg font-semibold p-4 border-b border-gray-700 bg-gray-900">Adapted Script (Editable)</h3>
+<div id="resizer" class="w-2 bg-gray-700 cursor-col-resize flex-shrink-0 hover:bg-blue-600 active:bg-blue-500 transition-colors"></div>
+
+<div id="adapted-script-panel" style="flex-basis: 50%;" class="flex flex-col overflow-auto">
+    <h3 class="text-lg font-semibold p-4 border-b border-gray-700 bg-gray-900 flex-shrink-0">Adapted Script (Editable)</h3>
     <textarea id="adaptedScriptEditor" class="editor-panel w-full h-full bg-black p-4 text-white font-mono text-sm leading-relaxed resize-none" placeholder="AI-generated adaptation will appear here. You can edit this text at any time."></textarea>
-  </div>
 </div>
 
 <script>
@@ -489,6 +489,67 @@
       apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
     }
   }
+ // --- START: ADD THIS NEW CODE ---
+  function makePanelsResizable() {
+      const resizer = document.getElementById('resizer');
+      const leftPanel = document.getElementById('original-script-panel');
+      const rightPanel = document.getElementById('adapted-script-panel');
+
+      if (!resizer || !leftPanel || !rightPanel) return;
+
+      let x = 0;
+      let leftWidth = 0;
+      let rightWidth = 0;
+
+      const mouseDownHandler = function (e) {
+          // Prevent text selection during drag
+          e.preventDefault();
+
+          // Get the current mouse position and panel widths
+          x = e.clientX;
+          leftWidth = leftPanel.getBoundingClientRect().width;
+          rightWidth = rightPanel.getBoundingClientRect().width;
+
+          // Attach the listeners to the document
+          document.addEventListener('mousemove', mouseMoveHandler);
+          document.addEventListener('mouseup', mouseUpHandler);
+
+          // Add some visual feedback
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+      };
+
+      const mouseMoveHandler = function (e) {
+          // How far the mouse has been moved
+          const dx = e.clientX - x;
+
+          const newLeftWidth = leftWidth + dx;
+          const newRightWidth = rightWidth - dx;
+          
+          // Set constraints to prevent panels from collapsing (e.g., min 200px)
+          if (newLeftWidth > 200 && newRightWidth > 200) {
+              // Use flex-basis for proper resizing in a flex container
+              leftPanel.style.flexBasis = `${newLeftWidth}px`;
+              rightPanel.style.flexBasis = `${newRightWidth}px`;
+          }
+      };
+
+      const mouseUpHandler = function () {
+          // Remove the listeners from the document
+          document.removeEventListener('mousemove', mouseMoveHandler);
+          document.removeEventListener('mouseup', mouseUpHandler);
+
+          // Restore cursor and text selection
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+      };
+
+      // Attach the handler to the resizer
+      resizer.addEventListener('mousedown', mouseDownHandler);
+  }
+
+ makePanelsResizable();
+  
 </script>
 </body>
 </html>
