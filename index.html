@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Screenplay Adaptation Studio Enhanced</title>
+<title>Screenplay Adaptation Studio Enhanced - Local Server Fix</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.18/mammoth.browser.min.js"></script>
@@ -56,6 +56,7 @@
       <div id="local-form" class="hidden space-y-2">
         <label for="apiUrl" class="text-sm font-medium text-gray-300">Local Server URL</label>
         <input type="text" id="apiUrl" value="http://localhost:1234/v1/chat/completions" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-sm" />
+        <p class="text-xs text-gray-400 mt-1">Ensure your local server supports CORS for this origin or use a CORS proxy in development.</p>
       </div>
     </section>
 
@@ -74,6 +75,12 @@
     </section>
 
     <button id="viewScriptButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 flex items-center justify-center text-lg disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Load & Enter Studio</button>
+
+    <button id="testLocalApiButton" class="mt-4 w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 flex items-center justify-center text-lg">
+      Test Local API Connection
+    </button>
+    <p id="apiTestStatus" class="text-xs mt-2 text-center"></p>
+
   </div>
 </div>
 
@@ -142,17 +149,19 @@
   const resetButton = document.getElementById('resetButton');
   const storyMemory = document.getElementById('storyMemory');
   const beatSheetInput = document.getElementById('beatSheetInput');
+  const testLocalApiButton = document.getElementById('testLocalApiButton');
+  const apiTestStatus = document.getElementById('apiTestStatus');
 
   // State Variables
   let originalScriptContent = '';
   let currentChunkIndex = 0;
-  let chunkBoundaries = [];  // Array of chunk start/end indices based on beats/scenes
-  let storyMemoryData = '';  // Serialized character, plot, theme memory summary
+  let chunkBoundaries = [];  // {start,end} by beats or fallback fixed chunk
+  let storyMemoryData = '';
 
   // Constants
-  const DEFAULT_CHUNK_SIZE = 7000; // fallback chunk size for text-based chunking
+  const DEFAULT_CHUNK_SIZE = 7000; // fallback chunk size
 
-  // --- Event Listeners ---
+  // Event Listeners
   apiSelectionRadios.forEach(radio => radio.addEventListener('change', toggleApiForm));
   fileInput.addEventListener('change', handleFileUpload);
   viewScriptButton.addEventListener('click', showEditorView);
@@ -160,16 +169,17 @@
   resetButton.addEventListener('click', () => location.reload());
   downloadButton.addEventListener('click', downloadScript);
   [originalScriptViewer, adaptedScriptEditor].forEach(el => el.addEventListener('scroll', syncScroll));
-
-  // --- Functions ---
+  testLocalApiButton.addEventListener('click', testLocalApiConnection);
 
   function toggleApiForm(event) {
     if (event.target.value === 'gemini') {
       geminiForm.classList.remove('hidden');
       localForm.classList.add('hidden');
+      apiTestStatus.textContent = '';
     } else {
       geminiForm.classList.add('hidden');
       localForm.classList.remove('hidden');
+      apiTestStatus.textContent = '';
     }
   }
 
@@ -192,10 +202,8 @@
       originalScriptContent = textContent.trim();
       fileStatus.textContent = `✅ Loaded: ${file.name} (Length: ${originalScriptContent.length} chars)`;
       fileStatus.classList.add('text-green-500');
-      
-      // Auto-generate chunk boundaries from beat sheet or fallback to text chunking
-      createChunkBoundaries();
 
+      createChunkBoundaries();
       viewScriptButton.disabled = false;
     } catch (error) {
       fileStatus.textContent = `Error: ${error.message}`;
@@ -204,29 +212,25 @@
   }
 
   function createChunkBoundaries() {
-    // Use beat sheet input as chunk delineation if provided (beat titles separated by newlines)
     const beatsRaw = beatSheetInput.value.trim();
     chunkBoundaries = [];
 
     if (beatsRaw) {
-      // Basic heuristic: split content by beats roughly proportional to script length
       const beats = beatsRaw.split('\n').map(b => b.trim()).filter(Boolean);
       const approxChunkSize = Math.floor(originalScriptContent.length / beats.length);
-
       let start = 0;
       beats.forEach((beat, idx) => {
-        // For each beat, assign approx chunk of script text
         let end = (idx < beats.length - 1) ? start + approxChunkSize : originalScriptContent.length;
-        chunkBoundaries.push({start, end});
+        chunkBoundaries.push({ start, end });
         start = end;
       });
     } else {
-      // Fallback: simple fixed size chunking by DEFAULT_CHUNK_SIZE chars
+      // Fixed chunk fallback
       const length = originalScriptContent.length;
       let start = 0;
       while (start < length) {
         let end = Math.min(start + DEFAULT_CHUNK_SIZE, length);
-        chunkBoundaries.push({start, end});
+        chunkBoundaries.push({ start, end });
         start = end;
       }
     }
@@ -255,16 +259,12 @@
     const progress = Math.round(((currentChunkIndex + 1) / chunkBoundaries.length) * 100);
     updateStatus(`Adapting chunk ${currentChunkIndex + 1} of ${chunkBoundaries.length}... (${progress}%)`, 'yellow');
 
-    // Update storyMemoryData summary dynamically for each chunk based on user input & adapted content (basic example)
-    // In production, you could parse adapted content intelligently to extract/update character names & plot points
     storyMemoryData = generateStoryMemorySummary(adaptedScriptEditor.value);
 
-    // Construct system and user prompts with memory context and chunk boundaries
     const systemPrompt = `You are a world-class screenplay adapter AI specialized in feature film scripts. Adapt the screenplay chunk provided, respecting the target language, culture, and core instructions. Maintain character names, plot points, and tone as defined in prior adapted material. Use the Story Memory to maintain continuity:\n${storyMemoryData}`;
 
     let userPrompt = `Parameters:\n- Target Language: ${document.getElementById('targetLanguage').value || 'as in original'}\n- Target Culture/Nation: ${document.getElementById('targetCulture').value || 'as in original'}\n- Core Instructions: ${document.getElementById('manualChanges').value || 'None'}\n\n---\nOriginal Screenplay Chunk:\n"""${scriptChunk}"""\n\nPlease provide ONLY the adapted version of THIS CHUNK without introductory phrases.`;
 
-    // Include limited adapted script context (last ~500 chars) for continuity
     if (adaptedScriptEditor.value.length > 500) {
       const recentContext = adaptedScriptEditor.value.slice(-500);
       userPrompt = `Previous Adapted Context:\n"""${recentContext}"""\n\n` + userPrompt;
@@ -273,11 +273,9 @@
     try {
       const adaptedText = await callApi(systemPrompt, userPrompt);
 
-      // Append to adapted script with spacing
       adaptedScriptEditor.value += (adaptedScriptEditor.value.length > 0 ? '\n\n' : '') + adaptedText;
       adaptedScriptEditor.scrollTop = adaptedScriptEditor.scrollHeight;
 
-      // Update story memory panel for user review/edit
       storyMemory.value = storyMemoryData;
 
       currentChunkIndex++;
@@ -292,13 +290,8 @@
   }
 
   function generateStoryMemorySummary(adaptedScript) {
-    // Simplified memory extraction: find character names or main plot points from adapted script
-    // Real implementation could use NLP or additional API calls to parse characters, themes, and locations
-
-    // Example placeholder: extract all uppercase words as character names (naive)
     const characterMatches = adaptedScript.match(/\b[A-Z]{2,}\b/g) || [];
     const uniqueCharacters = [...new Set(characterMatches)].join(', ') || 'No characters identified';
-
     return `Known Characters: ${uniqueCharacters}\nPlot Points: (to be expanded by user)\nThemes: (to be expanded by user)`;
   }
 
@@ -309,8 +302,7 @@
       const apiKey = document.getElementById('apiKey').value.trim();
       if (!apiKey) throw new Error('Gemini API Key is missing.');
 
-      // Adjust max tokens dynamically based on portion size, capped by API limits
-      const MAX_OUTPUT = 4096; // example limit
+      const MAX_OUTPUT = 4096;
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       const payload = {
@@ -324,44 +316,59 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(`API Error: ${err.error.message || 'Unknown error'}`);
+        const err = await response.json().catch(() => ({}));
+        throw new Error(`API Error: ${err.error?.message || response.statusText}`);
       }
+
       const result = await response.json();
       return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 
     } else {
-      // Local model interaction
-      const url = document.getElementById('apiUrl').value.trim();
+      let url = document.getElementById('apiUrl').value.trim();
       if (!url) throw new Error('Local Server URL is missing.');
+
+      // Uncomment for dev if CORS issue (not for production)
+      // url = `https://cors-anywhere.herokuapp.com/${url}`;
 
       const payload = {
         model: "local-model",
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
         temperature: 0.7,
-        max_tokens: 2048, // be conservative for local models
+        max_tokens: 2048,
         stream: false
       };
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(`API Error: ${err.error?.message || 'Request failed'}`);
+        if (!response.ok) {
+          const errJson = await response.json().catch(() => ({}));
+          throw new Error(`API Error: ${errJson.error?.message || response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (!result.choices || !result.choices[0].message) {
+          throw new Error('Unexpected API response structure');
+        }
+        return result.choices[0].message.content.trim();
+
+      } catch (err) {
+        console.error('Fetch/local API error:', err);
+        throw new Error(`Local API request failed: ${err.message}`);
       }
-
-      const result = await response.json();
-      return result.choices?.[0]?.message?.content?.trim() || '';
     }
   }
 
   // UI Helpers
-
   function setContinueButtonLoading(isLoading, finished = false) {
     continueButton.disabled = isLoading || finished;
     if (finished) {
@@ -408,12 +415,12 @@
 
     const scrollPercentage = sourceElement.scrollTop / (sourceElement.scrollHeight - sourceElement.clientHeight);
     targetElement.scrollTop = scrollPercentage * (targetElement.scrollHeight - targetElement.clientHeight);
-    // Debounce to prevent feedback loops
+
     targetElement.removeEventListener('scroll', syncScroll);
     scrollTimeout = setTimeout(() => targetElement.addEventListener('scroll', syncScroll), 100);
   }
 
-  // Parsing Helpers (unchanged)
+  // Parsing Helpers
   async function parsePdf(file) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
     const pdf = await pdfjsLib.getDocument(URL.createObjectURL(file)).promise;
@@ -425,10 +432,70 @@
     }
     return text;
   }
+
   async function parseDocx(file) {
     const arrayBuffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer });
     return result.value;
+  }
+
+  // New: Test local API connectivity
+  async function testLocalApiConnection() {
+    apiTestStatus.textContent = '';
+    if (document.querySelector('input[name="apiSelection"]:checked').value !== 'local') {
+      apiTestStatus.textContent = 'Switch to Local Server option to test local API.';
+      apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
+      return;
+    }
+
+    const url = document.getElementById('apiUrl').value.trim();
+    if (!url) {
+      apiTestStatus.textContent = 'Local Server URL is empty.';
+      apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
+      return;
+    }
+
+    apiTestStatus.textContent = 'Testing connection...';
+    apiTestStatus.className = 'text-xs mt-2 text-center text-yellow-400';
+
+    const testPayload = {
+      model: "local-model",
+      messages: [
+        { role: "system", content: "Test if local server chat API is reachable." },
+        { role: "user", content: "Ping" }
+      ],
+      temperature: 0,
+      max_tokens: 5,
+      stream: false
+    };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload)
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        apiTestStatus.textContent = `Error: ${err.error?.message || response.statusText}`;
+        apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.choices && data.choices[0]?.message?.content) {
+        apiTestStatus.textContent = 'Local API connection successful!';
+        apiTestStatus.className = 'text-xs mt-2 text-center text-green-500';
+      } else {
+        apiTestStatus.textContent = 'Unexpected response format from local API.';
+        apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
+      }
+    } catch (error) {
+      apiTestStatus.textContent = `Connection failed: ${error.message}`;
+      apiTestStatus.className = 'text-xs mt-2 text-center text-red-500';
+    }
   }
 </script>
 </body>
